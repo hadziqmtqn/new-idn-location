@@ -46,13 +46,11 @@ v1.get('/provinces', async (req, res) => {
   } catch (error) { res.status(500).json({ error: 'Internal Server Error' }); }
 });
 
-// 3. Cities (Updated for better compatibility)
+// 3. Cities (Updated to match Laravel's name-based filtering)
 v1.get('/cities', async (req, res) => {
   try {
-    // Support multiple parameter names for compatibility
-    const province_code = req.query.province_code || req.query.province_id || req.query.province;
-    const { q } = req.query;
-
+    const { province_code, province_id, province, q } = req.query;
+    
     let query = `
       SELECT c.code, c.name, c.province_code, p.name as province_name 
       FROM cities c
@@ -62,10 +60,19 @@ v1.get('/cities', async (req, res) => {
     const params = [];
     let paramCount = 1;
 
-    if (province_code) {
+    // Logic: If it's a number, filter by code. If it's text (like Laravel), filter by province name.
+    if (province_code || province_id) {
       query += ` AND c.province_code = $${paramCount++}`;
-      params.push(province_code);
+      params.push(province_code || province_id);
+    } else if (province) {
+      if (/^\d+$/.test(province)) {
+        query += ` AND c.province_code = $${paramCount++}`;
+      } else {
+        query += ` AND p.name = $${paramCount++}`;
+      }
+      params.push(province);
     }
+
     if (q) {
       query += ` AND c.name ILIKE $${paramCount++}`;
       params.push(`%${q}%`);
@@ -86,23 +93,30 @@ v1.get('/cities', async (req, res) => {
 // 4. Districts
 v1.get('/districts', async (req, res) => {
   try {
-    const city_code = req.query.city_code || req.query.city_id || req.query.city;
-    const { q } = req.query;
-
-    let query = 'SELECT code, name, city_code FROM districts WHERE 1=1';
+    const { city_code, city_id, city, q } = req.query;
+    let query = `
+        SELECT d.code, d.name, d.city_code, c.name as city_name 
+        FROM districts d
+        JOIN cities c ON d.city_code = c.code
+        WHERE 1=1
+    `;
     const params = [];
     let paramCount = 1;
 
-    if (city_code) {
-      query += ` AND city_code = $${paramCount++}`;
-      params.push(city_code);
-    }
-    if (q) {
-      query += ` AND name ILIKE $${paramCount++}`;
-      params.push(`%${q}%`);
+    if (city_code || city_id) {
+      query += ` AND d.city_code = $${paramCount++}`;
+      params.push(city_code || city_id);
+    } else if (city) {
+      if (/^\d+$/.test(city)) {
+        query += ` AND d.city_code = $${paramCount++}`;
+      } else {
+        query += ` AND c.name = $${paramCount++}`;
+      }
+      params.push(city);
     }
 
-    query += ' ORDER BY name ASC';
+    if (q) { query += ` AND d.name ILIKE $${paramCount++}`; params.push(`%${q}%`); }
+    query += ' ORDER BY d.name ASC';
     const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (error) { res.status(500).json({ error: 'Internal Server Error' }); }
@@ -111,9 +125,7 @@ v1.get('/districts', async (req, res) => {
 // 5. Villages
 v1.get('/villages', async (req, res) => {
   try {
-    const district_code = req.query.district_code || req.query.district_id || req.query.district;
-    const { district_name, q, limit = 100 } = req.query;
-
+    const { district_code, district_id, district, district_name, q, limit = 100 } = req.query;
     let query = `
       SELECT v.code, v.name, v.district_code, d.name as district_name 
       FROM villages v
@@ -123,19 +135,20 @@ v1.get('/villages', async (req, res) => {
     const params = [];
     let paramCount = 1;
 
-    if (district_code) {
-      query += ` AND v.district_code = $${paramCount++}`;
-      params.push(district_code);
-    }
-    if (district_name) {
+    const dRef = district_code || district_id || district;
+    if (dRef) {
+      if (/^\d+$/.test(dRef)) {
+        query += ` AND v.district_code = $${paramCount++}`;
+      } else {
+        query += ` AND d.name = $${paramCount++}`;
+      }
+      params.push(dRef);
+    } else if (district_name) {
       query += ` AND d.name ILIKE $${paramCount++}`;
       params.push(`%${district_name}%`);
     }
-    if (q) {
-      query += ` AND v.name ILIKE $${paramCount++}`;
-      params.push(`%${q}%`);
-    }
 
+    if (q) { query += ` AND v.name ILIKE $${paramCount++}`; params.push(`%${q}%`); }
     query += ` ORDER BY v.name ASC LIMIT $${paramCount}`;
     params.push(limit);
 
