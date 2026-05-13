@@ -6,71 +6,53 @@ require('dotenv').config();
 
 const app = express();
 
-// Use Pool for Neon/PostgreSQL connection
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false // Required for Neon
-  }
+  ssl: { rejectUnauthorized: false }
 });
 
-app.use(cors()); // Allow access from other applications
+app.use(cors());
 app.use(morgan('dev'));
 app.use(express.json());
 
-// API v1 Routes
 const v1 = express.Router();
 
-// 1. Stats Endpoint
+// 1. Stats
 v1.get('/stats', async (req, res) => {
   try {
     const provinceCount = await pool.query('SELECT COUNT(*) FROM provinces');
     const cityCount = await pool.query('SELECT COUNT(*) FROM cities');
     const districtCount = await pool.query('SELECT COUNT(*) FROM districts');
     const villageCount = await pool.query('SELECT COUNT(*) FROM villages');
-
     res.json({
       provinces: parseInt(provinceCount.rows[0].count),
       cities: parseInt(cityCount.rows[0].count),
       districts: parseInt(districtCount.rows[0].count),
       villages: parseInt(villageCount.rows[0].count)
     });
-  } catch (error) {
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
+  } catch (error) { res.status(500).json({ error: 'Internal Server Error' }); }
 });
 
-// 2. Province Endpoint (Matches Laravel structure)
+// 2. Provinces
 v1.get('/provinces', async (req, res) => {
   try {
     const { q } = req.query;
     let query = 'SELECT code, name FROM provinces';
     const params = [];
-
-    if (q) {
-      query += ' WHERE name ILIKE $1';
-      params.push(`%${q}%`);
-    }
-
+    if (q) { query += ' WHERE name ILIKE $1'; params.push(`%${q}%`); }
     query += ' ORDER BY name ASC';
     const result = await pool.query(query, params);
-    
-    // Explicit mapping to match Laravel collect()
-    const response = result.rows.map(row => ({
-      code: row.code,
-      name: row.name
-    }));
-
-    res.json(response);
-  } catch (error) {
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
+    res.json(result.rows.map(row => ({ code: row.code, name: row.name })));
+  } catch (error) { res.status(500).json({ error: 'Internal Server Error' }); }
 });
 
-// 3. City Endpoint (Matches Laravel with('provinceCode'))
+// 3. Cities (Updated for better compatibility)
 v1.get('/cities', async (req, res) => {
   try {
-    const { province_code, q } = req.query;
+    // Support multiple parameter names for compatibility
+    const province_code = req.query.province_code || req.query.province_id || req.query.province;
+    const { q } = req.query;
+
     let query = `
       SELECT c.code, c.name, c.province_code, p.name as province_name 
       FROM cities c
@@ -92,26 +74,21 @@ v1.get('/cities', async (req, res) => {
     query += ' ORDER BY c.name ASC';
     const result = await pool.query(query, params);
     
-    const response = result.rows.map(row => ({
+    res.json(result.rows.map(row => ({
       code: row.code,
       name: row.name,
       province_code: row.province_code,
-      province: {
-        code: row.province_code,
-        name: row.province_name
-      }
-    }));
-
-    res.json(response);
-  } catch (error) {
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
+      province: { code: row.province_code, name: row.province_name }
+    })));
+  } catch (error) { res.status(500).json({ error: 'Internal Server Error' }); }
 });
 
-// 4. District Endpoint
+// 4. Districts
 v1.get('/districts', async (req, res) => {
   try {
-    const { city_code, q } = req.query;
+    const city_code = req.query.city_code || req.query.city_id || req.query.city;
+    const { q } = req.query;
+
     let query = 'SELECT code, name, city_code FROM districts WHERE 1=1';
     const params = [];
     let paramCount = 1;
@@ -128,15 +105,15 @@ v1.get('/districts', async (req, res) => {
     query += ' ORDER BY name ASC';
     const result = await pool.query(query, params);
     res.json(result.rows);
-  } catch (error) {
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
+  } catch (error) { res.status(500).json({ error: 'Internal Server Error' }); }
 });
 
-// 5. Village Endpoint
+// 5. Villages
 v1.get('/villages', async (req, res) => {
   try {
-    const { district_code, district_name, q, limit = 100 } = req.query;
+    const district_code = req.query.district_code || req.query.district_id || req.query.district;
+    const { district_name, q, limit = 100 } = req.query;
+
     let query = `
       SELECT v.code, v.name, v.district_code, d.name as district_name 
       FROM villages v
@@ -164,24 +141,18 @@ v1.get('/villages', async (req, res) => {
 
     const result = await pool.query(query, params);
     res.json(result.rows);
-  } catch (error) {
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
+  } catch (error) { res.status(500).json({ error: 'Internal Server Error' }); }
 });
 
 app.use('/api/v1', v1);
 
-// Health check
 app.get('/', (req, res) => {
   res.json({ status: 'ok', message: 'IDN Location API is running' });
 });
 
 module.exports = app;
 
-// For local development
 if (process.env.NODE_ENV !== 'production') {
   const PORT = process.env.PORT || 3001;
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-  });
+  app.listen(PORT, () => { console.log(`Server running on port ${PORT}`); });
 }
