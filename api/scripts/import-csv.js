@@ -47,7 +47,7 @@ async function run() {
     // Tambahkan tabel lain jika sudah ada CSV-nya:
     // await importCSV('cities', path.join(baseDir, 'indonesia_cities.csv'));
     // await importCSV('districts', path.join(baseDir, 'indonesia_districts.csv'));
-    await importCSV('villages', path.join(baseDir, 'indonesia_villages.csv'));
+    // await importCSV('villages', path.join(baseDir, 'indonesia_villages.csv'));
 
   } catch (err) {
     console.error(err);
