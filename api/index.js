@@ -136,21 +136,32 @@ v1.get('/districts', async (req, res) => {
 // 5. Village Endpoint
 v1.get('/villages', async (req, res) => {
   try {
-    const { district_code, q } = req.query;
-    let query = 'SELECT code, name, district_code FROM villages WHERE 1=1';
+    const { district_code, district_name, q, limit = 100 } = req.query;
+    let query = `
+      SELECT v.code, v.name, v.district_code, d.name as district_name 
+      FROM villages v
+      JOIN districts d ON v.district_code = d.code
+      WHERE 1=1
+    `;
     const params = [];
     let paramCount = 1;
 
     if (district_code) {
-      query += ` AND district_code = $${paramCount++}`;
+      query += ` AND v.district_code = $${paramCount++}`;
       params.push(district_code);
     }
+    if (district_name) {
+      query += ` AND d.name ILIKE $${paramCount++}`;
+      params.push(`%${district_name}%`);
+    }
     if (q) {
-      query += ` AND name ILIKE $${paramCount++}`;
+      query += ` AND v.name ILIKE $${paramCount++}`;
       params.push(`%${q}%`);
     }
 
-    query += ' ORDER BY name ASC';
+    query += ` ORDER BY v.name ASC LIMIT $${paramCount}`;
+    params.push(limit);
+
     const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (error) {
