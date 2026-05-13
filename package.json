@@ -1,0 +1,17 @@
+{
+  "name": "idn-location-monorepo",
+  "private": true,
+  "workspaces": [
+    "api",
+    "frontend"
+  ],
+  "scripts": {
+    "api:dev": "npm run dev -w api",
+    "frontend:dev": "npm run dev -w frontend",
+    "dev": "concurrently \"npm run api:dev\" \"npm run frontend:dev\"",
+    "build": "npm run build -w frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
