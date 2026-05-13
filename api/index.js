@@ -14,13 +14,14 @@ const pool = new Pool({
   }
 });
 
-app.use(cors());
+app.use(cors()); // Allow access from other applications
 app.use(morgan('dev'));
 app.use(express.json());
 
 // API v1 Routes
 const v1 = express.Router();
 
+// 1. Stats Endpoint
 v1.get('/stats', async (req, res) => {
   try {
     const provinceCount = await pool.query('SELECT COUNT(*) FROM provinces');
@@ -35,11 +36,11 @@ v1.get('/stats', async (req, res) => {
       villages: parseInt(villageCount.rows[0].count)
     });
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
+// 2. Province Endpoint (Matches Laravel structure)
 v1.get('/provinces', async (req, res) => {
   try {
     const { q } = req.query;
@@ -53,38 +54,61 @@ v1.get('/provinces', async (req, res) => {
 
     query += ' ORDER BY name ASC';
     const result = await pool.query(query, params);
-    res.json(result.rows);
+    
+    // Explicit mapping to match Laravel collect()
+    const response = result.rows.map(row => ({
+      code: row.code,
+      name: row.name
+    }));
+
+    res.json(response);
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
+// 3. City Endpoint (Matches Laravel with('provinceCode'))
 v1.get('/cities', async (req, res) => {
   try {
     const { province_code, q } = req.query;
-    let query = 'SELECT code, name, province_code FROM cities WHERE 1=1';
+    let query = `
+      SELECT c.code, c.name, c.province_code, p.name as province_name 
+      FROM cities c
+      JOIN provinces p ON c.province_code = p.code
+      WHERE 1=1
+    `;
     const params = [];
     let paramCount = 1;
 
     if (province_code) {
-      query += ` AND province_code = $${paramCount++}`;
+      query += ` AND c.province_code = $${paramCount++}`;
       params.push(province_code);
     }
     if (q) {
-      query += ` AND name ILIKE $${paramCount++}`;
+      query += ` AND c.name ILIKE $${paramCount++}`;
       params.push(`%${q}%`);
     }
 
-    query += ' ORDER BY name ASC';
+    query += ' ORDER BY c.name ASC';
     const result = await pool.query(query, params);
-    res.json(result.rows);
+    
+    const response = result.rows.map(row => ({
+      code: row.code,
+      name: row.name,
+      province_code: row.province_code,
+      province: {
+        code: row.province_code,
+        name: row.province_name
+      }
+    }));
+
+    res.json(response);
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
+// 4. District Endpoint
 v1.get('/districts', async (req, res) => {
   try {
     const { city_code, q } = req.query;
@@ -105,11 +129,11 @@ v1.get('/districts', async (req, res) => {
     const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
+// 5. Village Endpoint
 v1.get('/villages', async (req, res) => {
   try {
     const { district_code, q } = req.query;
@@ -130,16 +154,15 @@ v1.get('/villages', async (req, res) => {
     const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
-app.use('/v1', v1);
+app.use('/api/v1', v1);
 
 // Health check
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', message: 'IDN Location API is running with Neon PostgreSQL' });
+  res.json({ status: 'ok', message: 'IDN Location API is running' });
 });
 
 module.exports = app;

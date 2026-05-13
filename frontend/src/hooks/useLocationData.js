@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 
 const API_BASE_URL = window.location.hostname === 'localhost' 
-  ? 'http://localhost:3001/v1' 
-  : '/v1';
+  ? 'http://localhost:3001/api/v1' 
+  : '/api/v1';
 
 export function useLocationData() {
   const [stats, setStats] = useState({ provinces: 0, cities: 0, districts: 0, villages: 0 });
